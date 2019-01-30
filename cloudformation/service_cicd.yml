@@ -1,0 +1,133 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Base file to setup a service
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: staging
+    Description: "The environment of the ECS cluster"
+  ServiceName:
+    Type: String
+    Default: some_service
+    Description: "The name of the code repo, which will also become the service name.  Only lowercase alphanumeric and -"
+
+Resources:
+  # CI/CD for the service
+  BuildRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "codebuild.amazonaws.com"
+                - "codepipeline.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Policies:
+        - PolicyName: "service"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action: "*"
+                Resource: "*"
+
+  # S3 Bucket that gets auto named with stack name and hash.  This
+  # will contain all the build artifacts encrypted.  Delete the
+  # CloudFormation stack will fail on S3, which needs to be manually
+  # deleted, for the stack to be deleted.
+  S3Artifacts:
+    Type: AWS::S3::Bucket
+
+  # CodeBuild for the CodePipeline.  This build can't be run outside
+  # of the pipeline.  Environment variables are provided to allow the
+  # buildspec.yml access to AWS information needed for the build.
+  CodeBuild:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Ref ServiceName
+      Source:
+        Type: CODEPIPELINE
+      ServiceRole: !GetAtt BuildRole.Arn
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/java:openjdk-8
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: AWS_DEFAULT_REGION
+            Value: !Ref AWS::Region
+          - Name: AWS_ACCOUNT_ID
+            Value: !Ref AWS::AccountId
+          - Name: IMAGE_REPO_NAME
+            Value: !Ref ServiceName
+          - Name: TASK_CONTAINER
+            Value: !Ref ServiceName
+      Artifacts:
+        Type: CODEPIPELINE
+
+  # 3 Stage CI/CD Pipeline that gets code from CodeCommit, builds, and
+  # deploys to ECS.  The deploy uses the file "imagedefinitions.json" to
+  # update the Task definition and Service.  ECS then will using a
+  # Rolling Deploy to swap out the service tasks one by one.
+  CodePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      RoleArn: !GetAtt BuildRole.Arn
+      Name: !Ref ServiceName
+      ArtifactStore:
+        Type: S3
+        Location: !Ref S3Artifacts
+      Stages:
+        - Name: Source
+          Actions:
+            - RunOrder: 1
+              Name: SourceAction
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeCommit
+                Version: 1
+              Configuration:
+                RepositoryName: !Ref ServiceName
+                BranchName: hello-config #Commonly master, but points to a branch for blog.
+              OutputArtifacts:
+                - Name: SourceOutput
+
+        - Name: Build
+          Actions:
+            - RunOrder: 1
+              Name: BuildAction
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              Configuration:
+                ProjectName: !Ref CodeBuild
+              InputArtifacts:
+                - Name: SourceOutput
+              OutputArtifacts:
+                - Name: BuildOutput
+
+        - Name: Deploy
+          Actions:
+            - RunOrder: 1
+              Name: DeployAction
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: ECS
+                Version: 1
+              Configuration:
+                ClusterName:
+                  Fn::ImportValue: !Sub ${EnvironmentName}:ClusterName
+                ServiceName: !GetAtt Service.Name
+                FileName: imagedefinitions.json
+              InputArtifacts:
+                - Name: BuildOutput
+
+
