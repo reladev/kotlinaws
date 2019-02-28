@@ -10,6 +10,10 @@ Parameters:
     Type: String
     Default: hello-ecs
     Description: "A ServiceName used with 'service.yml' template to create the service."
+  Branch:
+    Type: String
+    Default: master
+    Description: "The branch that will trigger build/deploy when it changes."
 
 Resources:
   # CI/CD for the service
@@ -93,7 +97,7 @@ Resources:
                 Version: 1
               Configuration:
                 RepositoryName: !Ref ServiceName
-                BranchName: hello-config #Commonly master, but points to a branch for blog.
+                BranchName: !Ref Branch
               OutputArtifacts:
                 - Name: SourceOutput
 
@@ -126,9 +130,12 @@ Resources:
                 ClusterName:
                   Fn::ImportValue: !Sub ${EnvironmentName}:ClusterName
                 ServiceName:
-                  Fn::ImportValue: !Sub ${EnvironmentName}:ServiceName
+                  Fn::ImportValue: !Sub ${EnvironmentName}:${ServiceName}:Service
                 FileName: imagedefinitions.json
               InputArtifacts:
                 - Name: BuildOutput
+
+
+
 
 
