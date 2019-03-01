@@ -47,7 +47,7 @@ tasks.withType<ShadowJar>  {
 
 tasks.jar {
     doLast{
-        val gitHash = execOutput {
+        val gitHash = System.getenv("GIT_HASH") ?: execOutput {
             commandLine("git", "rev-parse", "--short", "HEAD")
         }
         val format = DateTimeFormatter.ofPattern("YYMMddHHmm")
