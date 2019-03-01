@@ -11,6 +11,7 @@ import io.ktor.routing.get
 import io.ktor.routing.routing
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
+import java.io.File
 
 
 fun main(args: Array<String>) {
@@ -24,6 +25,11 @@ fun Application.mainModule() {
     routing {
         get("/") {
             call.respondText(config.HELLO_MESSAGE, contentType = ContentType.Text.Plain)
+        }
+
+        get("/version") {
+            val version = File("version.txt").readText()
+            call.respondText(version, contentType = ContentType.Text.Plain)
         }
     }
 }
