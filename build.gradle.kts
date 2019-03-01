@@ -1,5 +1,12 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import org.jetbrains.kotlin.cli.common.arguments.parseCommandLineArguments
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import java.io.*
+import java.time.*
+import java.time.format.*
+
+val project_version = "1.3"
+val date = LocalDateTime.now()
 
 val ktor_version = "1.1.2"
 val logback_version = "1.2.3"
@@ -9,6 +16,7 @@ plugins {
     application
     id("org.jetbrains.kotlin.jvm").version("1.3.20")
     id("com.github.johnrengelman.shadow") version "4.0.4"
+    id("com.palantir.git-version") version "0.11.0"
 }
 
 repositories {
@@ -36,4 +44,25 @@ application {
 
 tasks.withType<ShadowJar>  {
     archiveBaseName.set("${project.name}-all")
+    doLast{
+        val gitHash = execOutput {
+            commandLine("git", "rev-parse", "--short", "HEAD")
+        }
+        val format = DateTimeFormatter.ofPattern("YYMMddHHmm")
+        File("build/libs/version.txt").writeText("""
+                       version:$project_version
+                       date: $date
+                       git: $gitHash
+                       tag: ${project_version}_${date.format(format)}
+                   """.trimIndent())
+    }
+}
+
+fun execOutput(block: ExecSpec.() -> Unit): String {
+    val output = ByteArrayOutputStream()
+    exec {
+        standardOutput = output
+        block()
+    }
+    return output.toString().trim()
 }
