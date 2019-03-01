@@ -16,7 +16,6 @@ plugins {
     application
     id("org.jetbrains.kotlin.jvm").version("1.3.20")
     id("com.github.johnrengelman.shadow") version "4.0.4"
-    id("com.palantir.git-version") version "0.11.0"
 }
 
 repositories {
@@ -44,6 +43,9 @@ application {
 
 tasks.withType<ShadowJar>  {
     archiveBaseName.set("${project.name}-all")
+}
+
+tasks.jar {
     doLast{
         val gitHash = execOutput {
             commandLine("git", "rev-parse", "--short", "HEAD")
